@@ -39,7 +39,8 @@ def root():
         "redoc": "/redoc",
         "version": "1.0.0",
         "auth": "Pass X-API-Key header",
-        "database": "SQLite"
+        "database": "PostgreSQL"
+
     }
 
 @app.post("/api/keys/generate")
