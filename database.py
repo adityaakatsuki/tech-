@@ -6,6 +6,26 @@ import os
 
 # Database setup
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+# Validate DATABASE_URL before passing it to SQLAlchemy so that missing or
+# unresolved Railway reference variables produce a clear, actionable error
+# instead of a cryptic SQLAlchemy parsing failure.
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is not set. "
+        "Add a Postgres service to your Railway project and link it to this "
+        "service via a reference variable: DATABASE_URL = ${{Postgres.DATABASE_URL}}"
+    )
+
+if "${{" in DATABASE_URL or "}}" in DATABASE_URL:
+    raise RuntimeError(
+        f"DATABASE_URL contains an unresolved reference variable placeholder: "
+        f"{DATABASE_URL!r}. "
+        "Make sure the Postgres service is deployed and the reference variable "
+        "DATABASE_URL = ${{Postgres.DATABASE_URL}} is configured correctly in "
+        "your Railway service settings."
+    )
+
 if DATABASE_URL.startswith("postgres://"):
     # Railway (and some other providers) emit the legacy "postgres://" scheme;
     # SQLAlchemy 1.4+ requires "postgresql://"
