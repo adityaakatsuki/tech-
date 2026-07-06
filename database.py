@@ -5,10 +5,16 @@ from datetime import datetime
 import os
 
 # Database setup
-DATABASE_URL = "sqlite:///E:/scraping web/company_tech.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if DATABASE_URL.startswith("postgres://"):
+    # Railway (and some other providers) emit the legacy "postgres://" scheme;
+    # SQLAlchemy 1.4+ requires "postgresql://"
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
 
 # Models
 class Company(Base):
@@ -47,22 +53,9 @@ class ScrapedRecord(Base):
 def init_db():
     """Create all tables"""
     Base.metadata.create_all(bind=engine)
-    _ensure_scraped_record_columns()
     print("Database initialized successfully")
 
-def _ensure_scraped_record_columns():
-    """Add any ScrapedRecord columns missing from an already-existing sqlite
-    file. create_all() only creates missing tables, not missing columns on
-    tables that already exist, so a column added to the model later needs
-    an explicit ALTER TABLE."""
-    with engine.begin() as conn:
-        existing_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(scraped_records)").fetchall()}
-        if not existing_cols:
-            return  # table doesn't exist yet; create_all() will have just made it with all columns
-        for col in ScrapedRecord.__table__.columns:
-            if col.name not in existing_cols:
-                col_type = col.type.compile(dialect=engine.dialect)
-                conn.exec_driver_sql(f"ALTER TABLE scraped_records ADD COLUMN {col.name} {col_type}")
+
 
 def get_db():
     """Get database session"""
