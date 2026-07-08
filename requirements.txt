@@ -6,6 +6,7 @@ fastapi
 uvicorn
 python-multipart
 sqlalchemy
+psycopg2-binary
 requests
 beautifulsoup4
 phonenumbers
