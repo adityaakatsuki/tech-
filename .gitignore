@@ -1,0 +1,10 @@
+.claude/settings.local.json
+__pycache__/
+*.pyc
+*.pyo
+.streamlit/secrets.toml
+.venv/
+venv/
+env/
+*.log
+.DS_Store
