@@ -1,7 +1,8 @@
+import os
+
 from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
-import secrets
 from database import (
     get_db, init_db, get_all_companies, filter_companies, get_stats, get_distinct_values, count_companies,
     get_scraped_records, get_scraped_record_by_id, count_scraped_records, add_scraped_record,
@@ -21,14 +22,12 @@ def startup_event():
     print("[OK] Database initialized")
 
 # API Key management
-VALID_API_KEYS = {
-    "sk-demo-key-12345": "Demo Key",
-    "sk-prod-key-67890": "Production Key"
-}
-
-# Generate a new API key
-def generate_api_key():
-    return f"sk-{secrets.token_hex(16)}"
+# Comma-separated list of accepted keys, e.g. API_KEYS="sk-abc123,sk-def456"
+_raw_api_keys = os.getenv("API_KEYS", "")
+VALID_API_KEYS = {key.strip() for key in _raw_api_keys.split(",") if key.strip()}
+if not VALID_API_KEYS:
+    print("[WARN] API_KEYS environment variable is not set - all X-API-Key "
+          "protected endpoints will reject every request until it is configured.")
 
 # API Key verification
 def verify_api_key(x_api_key: str = Header(...)):
@@ -142,16 +141,6 @@ def root():
         "version": "1.0.0",
         "auth": "Pass X-API-Key header",
         "database": "SQLite"
-    }
-
-@app.post("/api/keys/generate")
-def generate_key():
-    """Generate a new API key (demo endpoint)"""
-    new_key = generate_api_key()
-    VALID_API_KEYS[new_key] = "Auto-generated key"
-    return {
-        "api_key": new_key,
-        "message": "Store this key securely. You'll need it for all API requests."
     }
 
 @app.get("/api/health")

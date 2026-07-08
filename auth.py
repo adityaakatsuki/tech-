@@ -32,10 +32,15 @@ from database import (
 
 # ============ Config ============
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-insecure-secret-change-me")
-if JWT_SECRET_KEY == "dev-only-insecure-secret-change-me":
-    print("[WARN] JWT_SECRET_KEY is not set - using an insecure development default. "
-          "Set the JWT_SECRET_KEY environment variable in production.")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not JWT_SECRET_KEY:
+    raise RuntimeError(
+        "JWT_SECRET_KEY environment variable is not set. Generate one (e.g. "
+        "`python -c \"import secrets; print(secrets.token_hex(32))\"`) and set it "
+        "before starting the app."
+    )
+
+DEV_MODE = os.getenv("DEV_MODE", "false").strip().lower() in ("1", "true", "yes")
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60          # normal session
@@ -160,8 +165,12 @@ def get_user_from_token(db: Session, token: str) -> Optional[User]:
 def request_password_reset(db: Session, email: str) -> Optional[str]:
     """Create a reset token for the given email and 'send' it.
 
-    Returns the plaintext token only when SMTP isn't configured, so the
-    caller (Streamlit) can display it directly for local/dev testing.
+    Returns the plaintext token only in DEV_MODE when SMTP isn't configured,
+    so the caller (Streamlit) can display it directly for local/dev testing.
+    In production (DEV_MODE unset), the token is never returned to the
+    caller - it only reaches the real recipient via SMTP - since handing it
+    back to whoever submitted the form would let anyone take over any
+    account just by knowing their email address.
     Returns None both when a real email was sent and when the account
     doesn't exist, so the UI can show the same generic message either way.
     """
@@ -176,7 +185,9 @@ def request_password_reset(db: Session, email: str) -> Optional[str]:
     create_password_reset_token(db, user_id=user.id, token=token, expires_at=expires_at)
 
     sent_via_smtp = _send_reset_email(user.email, token)
-    return None if sent_via_smtp else token
+    if sent_via_smtp:
+        return None
+    return token if DEV_MODE else None
 
 
 def reset_password(db: Session, token: str, new_password: str, confirm_password: str) -> User:
