@@ -274,15 +274,16 @@ def render_company_overview(record) -> None:
         ("Headquarters", headquarters),
         ("Phone", _na(getattr(record, "primary_phone", ""))),
         ("Email", _na(getattr(record, "primary_email", ""))),
-        ("Contact Person", _na(getattr(record, "contact_person", ""))),
-        
         ("Status", None),
         ("Scan Time", format_dt(record.scraped_at)),
     ]
+    hideable_labels = {"Website", "Headquarters", "Phone", "Email"}
     cells = []
     for label, value in items:
         if label == "Status":
             cells.append(f"<div class='overview-item'><div class='k'>{label}</div><div class='v'>{status_badge}</div></div>")
+        elif label in hideable_labels and (not value or value == "Not Available"):
+            continue
         else:
             cells.append(f"<div class='overview-item'><div class='k'>{label}</div><div class='v'>{html.escape(str(value))}</div></div>")
     st.markdown(
