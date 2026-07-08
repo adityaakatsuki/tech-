@@ -24,7 +24,7 @@ sys.path.append(str(Path(__file__).resolve().parent / "company_tech_analysis"))
 from company_tech_analysis.utils.scraper import scrape_and_detect, TECH_SIGNATURES, HEADER_SIGNATURES
 from database import (
     init_db, SessionLocal, add_scraped_record, get_scraped_records,
-    search_scraped_records, delete_scraped_record,
+    get_scraped_record_by_id, search_scraped_records, delete_scraped_record,
 )
 import auth_pages
 
@@ -125,9 +125,10 @@ def format_dt(value) -> str:
 # ============================================================
 
 def load_scraped_df() -> pd.DataFrame:
+    user = auth_pages.current_user()
     db = SessionLocal()
     try:
-        records = get_scraped_records(db, limit=1000)
+        records = get_scraped_records(db, user_id=user.id, limit=1000)
     finally:
         db.close()
     return pd.DataFrame([{
@@ -494,10 +495,11 @@ def render_search() -> None:
             return
 
         info = result["company_info"]
+        user = auth_pages.current_user()
         db_session = SessionLocal()
         try:
             record = add_scraped_record(
-                db_session, url=query,
+                db_session, url=query, user_id=user.id,
                 technologies=result["technologies"], vendors=result["vendors"],
                 categories=result["categories"], chars_scraped=result["chars_scraped"],
                 company_name=info["company_name"], emails=info["emails"],
@@ -522,9 +524,10 @@ def render_search() -> None:
         st.success(f"Scraped {result['chars_scraped']:,} characters · saved to History")
         st.session_state["last_scan_record"] = record
     else:
+        user = auth_pages.current_user()
         db_session = SessionLocal()
         try:
-            matches = search_scraped_records(db_session, query)
+            matches = search_scraped_records(db_session, query, user_id=user.id)
         finally:
             db_session.close()
         if not matches:
@@ -571,6 +574,7 @@ def render_history_card(row: pd.Series) -> None:
         f"</div>",
         unsafe_allow_html=True,
     )
+    user = auth_pages.current_user()
     b1, b2 = st.columns(2)
     view_key = f"view_{record_id}"
     if b1.button("👁️ View Details", key=f"btn_{view_key}", width="stretch"):
@@ -578,7 +582,7 @@ def render_history_card(row: pd.Series) -> None:
     if b2.button("🗑️ Delete", key=f"del_{record_id}", width="stretch"):
         db_session = SessionLocal()
         try:
-            delete_scraped_record(db_session, record_id)
+            delete_scraped_record(db_session, record_id, user_id=user.id)
         finally:
             db_session.close()
         st.session_state.pop(view_key, None)
@@ -587,10 +591,9 @@ def render_history_card(row: pd.Series) -> None:
     if st.session_state.get(view_key):
         db_session = SessionLocal()
         try:
-            all_records = get_scraped_records(db_session, limit=1000)
+            record = get_scraped_record_by_id(db_session, record_id, user_id=user.id)
         finally:
             db_session.close()
-        record = next((r for r in all_records if r.id == record_id), None)
         if record:
             render_full_result(record)
 

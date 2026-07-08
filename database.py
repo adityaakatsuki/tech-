@@ -71,6 +71,7 @@ class ScrapedRecord(Base):
     __tablename__ = "scraped_records"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=True)
     url = Column(String, index=True)
     technologies = Column(String)
     vendors = Column(String)
@@ -255,6 +256,7 @@ def count_companies(db: Session):
     return db.query(Company).count()
 
 def add_scraped_record(db: Session, url: str, technologies: list, vendors: list, categories: list, chars_scraped: int,
+                        user_id: int = None,
                         company_name: str = None, emails: list = None, phones: list = None, address: str = None,
                         hq_street: str = None, hq_city: str = None, hq_state: str = None,
                         hq_country: str = None, hq_postal_code: str = None,
@@ -267,6 +269,7 @@ def add_scraped_record(db: Session, url: str, technologies: list, vendors: list,
     the full company profile (contact details, headquarters, logo, social
     links, meta tags) found on the page, for a URL"""
     record = ScrapedRecord(
+        user_id=user_id,
         url=url,
         technologies=",".join(technologies) if technologies else "",
         vendors=",".join(vendors) if vendors else "",
@@ -300,32 +303,45 @@ def add_scraped_record(db: Session, url: str, technologies: list, vendors: list,
     db.refresh(record)
     return record
 
-def get_scraped_records(db: Session, limit: int = 50, offset: int = 0):
-    """Get most recent scraped records"""
-    return db.query(ScrapedRecord).order_by(ScrapedRecord.scraped_at.desc()).offset(offset).limit(limit).all()
+def get_scraped_records(db: Session, user_id: int = None, limit: int = 50, offset: int = 0):
+    """Get most recent scraped records, optionally scoped to a single user"""
+    query = db.query(ScrapedRecord)
+    if user_id is not None:
+        query = query.filter(ScrapedRecord.user_id == user_id)
+    return query.order_by(ScrapedRecord.scraped_at.desc()).offset(offset).limit(limit).all()
 
-def get_scraped_record_by_id(db: Session, record_id: int):
-    """Get a single scraped record by id"""
-    return db.query(ScrapedRecord).filter(ScrapedRecord.id == record_id).first()
+def get_scraped_record_by_id(db: Session, record_id: int, user_id: int = None):
+    """Get a single scraped record by id, optionally scoped to a single user"""
+    query = db.query(ScrapedRecord).filter(ScrapedRecord.id == record_id)
+    if user_id is not None:
+        query = query.filter(ScrapedRecord.user_id == user_id)
+    return query.first()
 
-def count_scraped_records(db: Session):
-    """Count total scraped records in database"""
-    return db.query(ScrapedRecord).count()
+def count_scraped_records(db: Session, user_id: int = None):
+    """Count total scraped records in database, optionally scoped to a single user"""
+    query = db.query(ScrapedRecord)
+    if user_id is not None:
+        query = query.filter(ScrapedRecord.user_id == user_id)
+    return query.count()
 
-def search_scraped_records(db: Session, query: str, limit: int = 20):
-    """Find previously scraped records whose company name or URL contains query (case-insensitive)"""
+def search_scraped_records(db: Session, query: str, user_id: int = None, limit: int = 20):
+    """Find previously scraped records whose company name or URL contains query
+    (case-insensitive), optionally scoped to a single user"""
     like_query = f"%{query}%"
-    return (
-        db.query(ScrapedRecord)
-        .filter((ScrapedRecord.company_name.ilike(like_query)) | (ScrapedRecord.url.ilike(like_query)))
-        .order_by(ScrapedRecord.scraped_at.desc())
-        .limit(limit)
-        .all()
+    q = db.query(ScrapedRecord).filter(
+        (ScrapedRecord.company_name.ilike(like_query)) | (ScrapedRecord.url.ilike(like_query))
     )
+    if user_id is not None:
+        q = q.filter(ScrapedRecord.user_id == user_id)
+    return q.order_by(ScrapedRecord.scraped_at.desc()).limit(limit).all()
 
-def delete_scraped_record(db: Session, record_id: int) -> bool:
-    """Delete a single scraped record by id. Returns True if a row was deleted."""
-    record = db.query(ScrapedRecord).filter(ScrapedRecord.id == record_id).first()
+def delete_scraped_record(db: Session, record_id: int, user_id: int = None) -> bool:
+    """Delete a single scraped record by id, optionally scoped to a single
+    user. Returns True if a row was deleted."""
+    query = db.query(ScrapedRecord).filter(ScrapedRecord.id == record_id)
+    if user_id is not None:
+        query = query.filter(ScrapedRecord.user_id == user_id)
+    record = query.first()
     if record is None:
         return False
     db.delete(record)
