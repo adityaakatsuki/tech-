@@ -56,6 +56,7 @@ class User(Base):
     last_login = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     auth_provider = Column(String, default="local")  # "local" or "google"
+    theme_color = Column(String, default="#3B82F6")
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
@@ -356,6 +357,14 @@ def delete_all_companies(db: Session):
     return True
 
 
+def delete_scraped_records_for_user(db: Session, user_id: int) -> int:
+    """Delete every scraped record belonging to a single user. Returns the
+    number of rows deleted."""
+    count = db.query(ScrapedRecord).filter(ScrapedRecord.user_id == user_id).delete()
+    db.commit()
+    return count
+
+
 # ============ User / auth helpers ============
 
 def get_user_by_email(db: Session, email: str):
@@ -386,6 +395,16 @@ def update_last_login(db: Session, user: User) -> User:
 
 def update_user_password(db: Session, user: User, hashed_password: str) -> User:
     user.hashed_password = hashed_password
+    db.commit()
+    db.refresh(user)
+    return user
+
+def update_user_theme_color(db: Session, user_id: int, theme_color: str) -> User:
+    """Takes a user_id rather than a User instance because the caller's User
+    object (e.g. the one cached in Streamlit's session_state) usually comes
+    from an already-closed session and would be detached from this one."""
+    user = get_user_by_id(db, user_id)
+    user.theme_color = theme_color
     db.commit()
     db.refresh(user)
     return user

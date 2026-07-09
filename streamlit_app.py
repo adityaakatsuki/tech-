@@ -28,6 +28,7 @@ from company_tech_analysis.utils.scraper import scrape_and_detect, TECH_SIGNATUR
 from database import (
     init_db, SessionLocal, add_scraped_record, get_scraped_records,
     get_scraped_record_by_id, search_scraped_records, delete_scraped_record,
+    update_user_theme_color, delete_scraped_records_for_user,
 )
 import auth_pages
 
@@ -82,14 +83,44 @@ AVATAR_PALETTE = ["#3B82F6", "#2563EB", "#10B981", "#F59E0B", "#8B5CF6", "#EC489
 
 URL_RE = re.compile(r"^(https?://)?([\w-]+\.)+[a-zA-Z]{2,}(:\d{1,5})?(/[^\s]*)?$")
 
+DEFAULT_ACCENT = "#3B82F6"
+
 
 # ============================================================
-# CSS
+# CSS / accent color
 # ============================================================
 
-def load_css() -> None:
+def _shade_hex(hex_color: str, factor: float) -> str:
+    """Darken a #rrggbb color by `factor` (0-1), used as the second stop of
+    the gradients that otherwise hardcoded --primary/--accent."""
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) != 6:
+        return hex_color
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = (max(0, int(c * (1 - factor))) for c in (r, g, b))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) != 6:
+        return hex_color
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def get_accent() -> str:
+    return st.session_state.get("_accent", DEFAULT_ACCENT)
+
+
+def load_css(accent: str = DEFAULT_ACCENT) -> None:
     css_path = Path(__file__).resolve().parent / "assets" / "style.css"
     st.markdown(f"<style>{css_path.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+    if accent and accent.lower() != DEFAULT_ACCENT.lower():
+        st.markdown(
+            f"<style>:root {{ --primary: {accent}; --accent: {_shade_hex(accent, 0.2)}; }}</style>",
+            unsafe_allow_html=True,
+        )
 
 
 # ============================================================
@@ -341,7 +372,7 @@ def render_scan_charts(technologies: list, categories: list) -> None:
     with c2:
         tech_df = pd.DataFrame({"Technology": technologies, "Detected": 1})
         fig2 = px.bar(tech_df, x="Detected", y="Technology", orientation="h",
-                      color_discrete_sequence=["#3B82F6"])
+                      color_discrete_sequence=[get_accent()])
         fig2.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=320,
                             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                             font_color="#E2E8F0", xaxis=dict(visible=False), yaxis_title=None)
@@ -397,8 +428,9 @@ def render_dashboard() -> None:
     timeline = df.copy()
     timeline["Scraped At"] = pd.to_datetime(timeline["Scraped At"])
     timeline_counts = timeline.set_index("Scraped At").resample("D").size().reset_index(name="Scans")
-    fig = px.area(timeline_counts, x="Scraped At", y="Scans", color_discrete_sequence=["#3B82F6"])
-    fig.update_traces(line_color="#3B82F6", fillcolor="rgba(59,130,246,0.18)")
+    accent = get_accent()
+    fig = px.area(timeline_counts, x="Scraped At", y="Scans", color_discrete_sequence=[accent])
+    fig.update_traces(line_color=accent, fillcolor=_hex_to_rgba(accent, 0.18))
     fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=280,
                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#E2E8F0")
     st.plotly_chart(fig, width="stretch")
@@ -675,7 +707,7 @@ def render_history() -> None:
         if tech_counts:
             tech_df = pd.DataFrame(sorted(tech_counts.items(), key=lambda x: -x[1])[:15], columns=["Technology", "Companies"])
             fig2 = px.bar(tech_df, x="Companies", y="Technology", orientation="h",
-                          color_discrete_sequence=["#3B82F6"])
+                          color_discrete_sequence=[get_accent()])
             fig2.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=340,
                                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                                 font_color="#E2E8F0", yaxis=dict(autorange="reversed"), yaxis_title=None)
@@ -710,21 +742,60 @@ def render_settings() -> None:
                 "<div class='hero-subtitle'>App preferences and local data controls.</div></div>",
                 unsafe_allow_html=True)
 
+    user = auth_pages.current_user()
+
+    flash = st.session_state.pop("_settings_flash", None)
+    if flash:
+        st.success(flash)
+
     st.markdown("<div class='app-card'>", unsafe_allow_html=True)
     st.markdown("#### Appearance")
-    st.caption("This dashboard uses a fixed modern dark theme for readability and consistency.")
-    st.color_picker("Primary color", "#3B82F6", disabled=True, label_visibility="visible")
+    st.caption("Pick an accent color - it re-colors buttons, gradients and charts for your account.")
+    current_color = getattr(user, "theme_color", None) or DEFAULT_ACCENT
+    new_color = st.color_picker("Accent color", current_color, label_visibility="visible")
+    if new_color.lower() != current_color.lower():
+        db = SessionLocal()
+        try:
+            updated_user = update_user_theme_color(db, user.id, new_color)
+            st.session_state["auth_user"] = updated_user
+        finally:
+            db.close()
+        st.session_state["_accent"] = new_color
+        st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.write("")
     st.markdown("<div class='app-card'>", unsafe_allow_html=True)
     st.markdown("#### Data")
-    st.caption("Scraped data is stored locally in `company_tech.db` (SQLite).")
-    if st.button("♻️ Clear cached results in this session"):
+    st.caption("Scraped data is stored in the app database, scoped to your account.")
+
+    df = load_scraped_df()
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("♻️ Clear cached results in this session", width="stretch"):
+            st.session_state.pop("last_scan_record", None)
+            st.session_state.pop("last_scan_matches", None)
+            st.cache_data.clear()
+            st.success("Session cache cleared.")
+    with c2:
+        csv_bytes = df.drop(columns=["id"]).to_csv(index=False).encode("utf-8") if not df.empty else b""
+        st.download_button("⬇️ Export all my data as CSV", csv_bytes,
+                            file_name="my_scraped_company_tech_data.csv", mime="text/csv",
+                            disabled=df.empty, width="stretch")
+
+    st.markdown("<div class='auth-divider'></div>", unsafe_allow_html=True)
+    st.markdown(f"**Danger zone** — permanently delete all {len(df)} scraped record(s) in your history.")
+    confirm = st.checkbox("I understand this cannot be undone.", key="confirm_delete_all")
+    if st.button("🗑️ Delete all my history", disabled=not confirm or df.empty, width="stretch"):
+        db = SessionLocal()
+        try:
+            deleted = delete_scraped_records_for_user(db, user.id)
+        finally:
+            db.close()
         st.session_state.pop("last_scan_record", None)
         st.session_state.pop("last_scan_matches", None)
-        st.cache_data.clear()
-        st.success("Session cache cleared.")
+        st.session_state["_settings_flash"] = f"Deleted {deleted} record(s)."
+        st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -767,13 +838,17 @@ def render_footer() -> None:
 # ============================================================
 
 def main() -> None:
-    load_css()
-
     if not auth_pages.is_authenticated():
+        load_css()
         print(f"[debug] main: not authenticated - session auth_user="
               f"{st.session_state.get('auth_user')!r}, query_params={dict(st.query_params)}")
         auth_pages.render_auth_flow()
         return
+
+    user = auth_pages.current_user()
+    accent = getattr(user, "theme_color", None) or DEFAULT_ACCENT
+    st.session_state["_accent"] = accent
+    load_css(accent)
 
     page = render_sidebar()
 
