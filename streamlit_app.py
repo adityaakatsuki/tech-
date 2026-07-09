@@ -770,6 +770,8 @@ def main() -> None:
     load_css()
 
     if not auth_pages.is_authenticated():
+        print(f"[debug] main: not authenticated - session auth_user="
+              f"{st.session_state.get('auth_user')!r}, query_params={dict(st.query_params)}")
         auth_pages.render_auth_flow()
         return
 

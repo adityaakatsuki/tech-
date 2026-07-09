@@ -58,11 +58,14 @@ def _sync_google_session() -> None:
         return
     try:
         google_user = st.user
-        if not google_user.is_logged_in:
+        is_logged_in = google_user.is_logged_in
+        print(f"[debug] _sync_google_session: st.user.is_logged_in={is_logged_in}")
+        if not is_logged_in:
             return
         email = google_user.email
         full_name = getattr(google_user, "name", None) or email
-    except Exception:
+    except Exception as e:
+        print(f"[debug] _sync_google_session: reading st.user failed: {e!r}")
         return
 
     db = SessionLocal()
@@ -75,6 +78,7 @@ def _sync_google_session() -> None:
     token = auth.create_access_token(user, remember_me=True)
     st.session_state["auth_user"] = user
     st.session_state["auth_token"] = token
+    print(f"[debug] _sync_google_session: authenticated {email!r} as user_id={user.id}")
 
 
 def is_authenticated() -> bool:
