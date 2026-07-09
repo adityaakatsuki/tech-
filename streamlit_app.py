@@ -20,6 +20,9 @@ import plotly.express as px
 import requests
 import streamlit as st
 
+import write_secrets
+write_secrets.main()
+
 sys.path.append(str(Path(__file__).resolve().parent / "company_tech_analysis"))
 from company_tech_analysis.utils.scraper import scrape_and_detect, TECH_SIGNATURES, HEADER_SIGNATURES
 from database import (
@@ -29,15 +32,6 @@ from database import (
 import auth_pages
 
 init_db()
-
-try:
-    _secrets_path = Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
-    print(f"[debug] secrets.toml exists on disk: {_secrets_path.exists()} at {_secrets_path}")
-    print(f"[debug] st.secrets has 'auth': {'auth' in st.secrets}")
-    if "auth" in st.secrets:
-        print(f"[debug] st.secrets['auth'] keys: {list(st.secrets['auth'].keys())}")
-except Exception as _e:
-    print(f"[debug] secrets check failed: {_e}")
 
 st.set_page_config(page_title="Company Tech Usage Dashboard", page_icon="📊", layout="wide")
 auth_pages.init_auth_state()
