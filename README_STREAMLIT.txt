@@ -10,3 +10,5 @@ The app expects the cleaned CSV at:
 E:\\scraping web\\company_tech_usage_sample_cleaned.csv
 
 Use the sidebar filters to explore the dataset. The app provides KPI cards, charts, and a download button for the filtered subset.
+
+Deploy check: 2026-07-11.
