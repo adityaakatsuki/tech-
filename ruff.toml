@@ -1,0 +1,5 @@
+[lint]
+# E402: this codebase intentionally mutates sys.path before certain
+# imports (local package resolution), so module-level imports aren't
+# always at the top of the file.
+ignore = ["E402"]

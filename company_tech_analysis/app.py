@@ -6,7 +6,6 @@ company technology stack usage across departments and projects.
 """
 
 import streamlit as st
-import pandas as pd
 import plotly.express as px
 from utils.data_loader import load_technology_data
 from utils.data_processor import process_tech_data
