@@ -16,8 +16,11 @@ from email.message import EmailMessage
 from typing import Optional
 
 import bcrypt
+from dotenv import load_dotenv
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+
+load_dotenv()
 
 from database import (
     User,
